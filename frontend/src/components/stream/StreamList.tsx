@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Stream, StreamStatus, QualityLevel } from '../../types/stream';
 import { useLiveStreams, useStreamStore } from '../../stores/streamStore';
 import { walrusService } from '../../lib/walrus';
+import { getThumbnailUrl } from '../../utils/thumbnails';
 
 interface StreamListProps {
   category?: string;
@@ -71,14 +72,6 @@ export const StreamList: React.FC<StreamListProps> = ({
       case QualityLevel.QUALITY_480P: return '480p';
       default: return 'SD';
     }
-  };
-
-  const getThumbnailUrl = (stream: Stream): string => {
-    if (stream.thumbnailWalrusId) {
-      return walrusService.getBlobUrl(stream.thumbnailWalrusId);
-    }
-    // Fallback to a placeholder
-    return `https://via.placeholder.com/320x180/1f2937/ffffff?text=${encodeURIComponent(stream.title)}`;
   };
 
   if (loading) {
@@ -157,12 +150,12 @@ const StreamCard: React.FC<StreamCardProps> = ({ stream, onClick }) => {
     }
   };
 
-  const getThumbnailUrl = (stream: Stream): string => {
-    if (stream.thumbnailWalrusId && !thumbnailError) {
-      return walrusService.getBlobUrl(stream.thumbnailWalrusId);
-    }
-    // Fallback to a placeholder
-    return `https://via.placeholder.com/320x180/1f2937/ffffff?text=${encodeURIComponent(stream.title)}`;
+  const getStreamThumbnailUrl = (stream: Stream): string => {
+    return getThumbnailUrl(stream.thumbnailWalrusId, {
+      streamId: stream.id,
+      title: stream.title,
+      category: stream.category
+    });
   };
 
   return (
@@ -177,7 +170,7 @@ const StreamCard: React.FC<StreamCardProps> = ({ stream, onClick }) => {
       {/* Thumbnail */}
       <div className="relative aspect-video bg-gray-700">
         <img
-          src={getThumbnailUrl(stream)}
+          src={getStreamThumbnailUrl(stream)}
           alt={stream.title}
           className="w-full h-full object-cover"
           onError={() => setThumbnailError(true)}

@@ -20,6 +20,43 @@
   }
 }
 
+/* Video.js player fixes */
+.video-js {
+  width: 100% !important;
+  height: 100% !important;
+  background-color: #000 !important;
+}
+
+.video-js .vjs-tech {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+}
+
+.video-js .vjs-poster {
+  background-size: cover;
+  background-position: center;
+}
+
+/* Dark theme for Video.js controls */
+.video-js .vjs-control-bar {
+  background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.8) 100%);
+}
+
+.video-js .vjs-big-play-button {
+  background-color: rgba(0,0,0,0.7);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  width: 80px;
+  height: 80px;
+  line-height: 76px;
+  font-size: 24px;
+}
+
+.video-js .vjs-big-play-button:hover {
+  background-color: rgba(59, 130, 246, 0.8);
+}
+
 /* Custom component styles */
 @layer components {
   .btn-primary {
@@ -31,21 +68,37 @@
   }
   
   .card {
-    @apply bg-gray-800 rounded-lg shadow-lg border border-gray-700;
+    @apply bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-lg;
   }
   
   .input-field {
-    @apply bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    @apply bg-gray-700 border border-gray-600 text-white placeholder-gray-400 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  }
+  
+  .text-gradient {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }
 
 /* Utility classes */
 @layer utilities {
-  .text-gradient {
-    @apply bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent;
+  .aspect-video {
+    aspect-ratio: 16 / 9;
   }
   
-  .glass-effect {
-    @apply bg-white backdrop-blur-md border border-white;
+  .aspect-square {
+    aspect-ratio: 1 / 1;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 } 

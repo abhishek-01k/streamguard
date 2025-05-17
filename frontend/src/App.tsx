@@ -17,6 +17,7 @@ import { AllServices } from './OwnedSubscriptionServices';
 import Feeds from './AllowlistView';
 import HomePage from './pages/HomePage';
 import StreamPage from './pages/StreamPage';
+import { CreateStreamPage } from './pages/CreateStreamPage';
 import './App.css';
 
 function SealExamplesPage() {
@@ -71,22 +72,29 @@ function App() {
     <Router>
       <div className="App">
         <Container>
-          <Flex position="sticky" px="4" py="2" justify="between" className="border-b border-gray-700 mb-6">
-            <div className="flex items-center space-x-4">
-              <Link to="/" className="text-decoration-none">
-                <h1 className="text-4xl font-bold text-gradient">🌊 StreamGuard</h1>
+          <header className="bg-gray-800 border-b border-gray-700">
+            <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+              <Link to="/" className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">🎬</span>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-white">StreamGuard</h1>
+                  <p className="text-xs text-gray-400">Decentralized Live Streaming</p>
+                </div>
               </Link>
-              <span className="text-gray-400 text-sm">Decentralized Live Streaming</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Link to="/seal-examples">
-                <Button variant="outline" size="2">Seal Examples</Button>
-              </Link>
-              <Box>
+              
+              <div className="flex items-center space-x-4">
+                <Link 
+                  to="/create-stream"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Start Streaming
+                </Link>
                 <ConnectButton />
-              </Box>
+              </div>
             </div>
-          </Flex>
+          </header>
           {currentAccount ? (
             <Routes>
               <Route path="/" element={<HomePage />} />
@@ -144,6 +152,7 @@ function App() {
                   />
                 </Routes>
               } />
+              <Route path="/create-stream" element={<CreateStreamPage />} />
             </Routes>
           ) : (
             <div className="text-center py-16">

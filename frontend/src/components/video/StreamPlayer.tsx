@@ -1,6 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
+// Import quality selector plugins
+import 'videojs-contrib-quality-levels';
+import 'videojs-hls-quality-selector';
+import '@silvermine/videojs-quality-selector';
+import '@silvermine/videojs-quality-selector/dist/css/quality-selector.css';
 import { StreamPlayerConfig, QualityLevel } from '../../types/stream';
 import { walrusService } from '../../lib/walrus';
 import { useStreamStore } from '../../stores/streamStore';
@@ -33,6 +38,7 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<VideoJSPlayer | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [manifestUrl, setManifestUrl] = useState<string>('');
@@ -41,26 +47,35 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
 
   // Initialize Video.js player
   const initializePlayer = useCallback(async () => {
-    if (!videoRef.current || !walrusManifestId) return;
+    if (!videoRef.current) return;
 
     try {
       setIsLoading(true);
       setError(null);
 
-      // Get the HLS manifest URL from Walrus
-      const manifestUrl = walrusService.getBlobUrl(walrusManifestId);
+      // Use demo HLS stream if no Walrus manifest is provided
+      let manifestUrl = '';
+      if (walrusManifestId && !walrusManifestId.startsWith('mock_manifest_')) {
+        // Get the HLS manifest URL from Walrus
+        manifestUrl = walrusService.getBlobUrl(walrusManifestId);
+      } else {
+        // Use a demo HLS stream for testing
+        manifestUrl = 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8';
+      }
+      
       setManifestUrl(manifestUrl);
 
       // Video.js configuration
       const options = {
-        autoplay,
+        autoplay: false, // Disable autoplay to avoid browser restrictions
         controls,
         muted,
         poster,
-        width,
-        height,
+        width: '100%',
+        height: '100%',
         fluid: true,
         responsive: true,
+        fill: true,
         playbackRates: [0.5, 1, 1.25, 1.5, 2],
         sources: [{
           src: manifestUrl,
@@ -73,12 +88,7 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
             overrideNative: true,
           },
         },
-        plugins: {
-          // Add quality selector plugin
-          qualitySelector: {
-            default: 'auto',
-          },
-        },
+        techOrder: ['html5'],
       };
 
       // Initialize player
@@ -87,11 +97,43 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
 
       // Player event handlers
       player.ready(() => {
+        console.log('Player ready');
         setIsLoading(false);
+        
+        // Initialize quality selector after player is ready
+        try {
+          // Add HLS quality selector if available
+          if (typeof (player as any).hlsQualitySelector === 'function') {
+            (player as any).hlsQualitySelector({
+              displayCurrentQuality: true,
+            });
+          }
+          // Fallback to silvermine quality selector
+          else if (typeof (player as any).qualitySelector === 'function') {
+            (player as any).qualitySelector();
+          }
+        } catch (qualityError) {
+          console.warn('Quality selector not available:', qualityError);
+        }
+        
         onReady?.(player);
       });
 
+      player.on('loadstart', () => {
+        console.log('Load start');
+      });
+
+      player.on('loadedmetadata', () => {
+        console.log('Metadata loaded');
+      });
+
+      player.on('canplay', () => {
+        console.log('Can play');
+        setIsLoading(false);
+      });
+
       player.on('play', () => {
+        console.log('Playing');
         onPlay?.();
       });
 
@@ -105,8 +147,10 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
 
       player.on('error', (event: any) => {
         const error = player.error();
+        console.error('Player error:', error);
         const errorMessage = error ? `Video error: ${error.message}` : 'Unknown video error';
         setError(errorMessage);
+        setIsLoading(false);
         onError?.(new Error(errorMessage));
       });
 
@@ -230,15 +274,19 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
 
   if (error) {
     return (
-      <div className={`stream-player-error ${className}`} style={{ width, height }}>
+      <div 
+        ref={containerRef}
+        className={`stream-player-error relative ${className}`} 
+        style={{ width: '100%', height: '100%', minHeight: '400px' }}
+      >
         <div className="flex items-center justify-center h-full bg-gray-900 text-white rounded-lg">
           <div className="text-center">
             <div className="text-red-500 text-xl mb-2">⚠️</div>
             <div className="text-lg font-semibold mb-2">Playback Error</div>
-            <div className="text-sm text-gray-300">{error}</div>
+            <div className="text-sm text-gray-300 mb-4">{error}</div>
             <button
               onClick={() => initializePlayer()}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
             >
               Retry
             </button>
@@ -249,7 +297,11 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
   }
 
   return (
-    <div className={`stream-player-container ${className}`} style={{ width, height }}>
+    <div 
+      ref={containerRef}
+      className={`stream-player-container relative ${className}`} 
+      style={{ width: '100%', height: '100%', minHeight: '400px' }}
+    >
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white rounded-lg z-10">
           <div className="text-center">
@@ -264,15 +316,16 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
         className="video-js vjs-default-skin w-full h-full"
         data-setup="{}"
         playsInline
+        style={{ width: '100%', height: '100%' }}
       />
       
       {/* Stream info overlay */}
-      <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded text-sm">
+      <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded text-sm z-20">
         Stream ID: {streamId}
       </div>
       
       {/* Quality indicator */}
-      <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded text-sm">
+      <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded text-sm z-20">
         {manifestUrl && (
           <span className="text-green-400">● LIVE</span>
         )}

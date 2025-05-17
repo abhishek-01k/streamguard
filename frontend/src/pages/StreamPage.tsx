@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
+import { Container } from '@radix-ui/themes';
 import StreamPlayer from '../components/video/StreamPlayer';
 import { useCurrentStream, useCurrentSession, useStreamStore } from '../stores/streamStore';
 import { Stream, QualityLevel } from '../types/stream';
@@ -335,9 +337,9 @@ export const StreamPage: React.FC<StreamPageProps> = () => {
       </div>
 
       {/* Tip Modal */}
-      {showTipModal && (
+      {showTipModal && createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
             <h3 className="text-white text-xl font-semibold mb-4">Send Tip</h3>
             
             <div className="space-y-4">
@@ -385,7 +387,8 @@ export const StreamPage: React.FC<StreamPageProps> = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
