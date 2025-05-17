@@ -11,49 +11,55 @@ import { useState } from 'react';
 import { CreateService } from './CreateSubscriptionService';
 import FeedsToSubscribe from './SubscriptionView';
 import { Service } from './SubscriptionService';
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { AllAllowlist } from './OwnedAllowlists';
 import { AllServices } from './OwnedSubscriptionServices';
 import Feeds from './AllowlistView';
+import HomePage from './pages/HomePage';
+import StreamPage from './pages/StreamPage';
+import './App.css';
 
-function LandingPage() {
+function SealExamplesPage() {
   return (
-    <Grid columns="2" gap="4">
-      <Card>
-        <Flex direction="column" gap="2" align="center" style={{ height: '100%' }}>
-          <div style={{ textAlign: 'center' }}>
-            <h2>Allowlist Example</h2>
-            <p>
-              Shows how a creator can define an allowlist based access. The creator first creates an
-              allowlist and can add or remove users in the list. The creator can then associate
-              encrypted files to the allowlist. Only users in the allowlist have access to decrypt
-              the files.
-            </p>
-          </div>
-          <Link to="/allowlist-example">
-            <Button size="3">Try it</Button>
-          </Link>
-        </Flex>
-      </Card>
-      <Card>
-        <Flex direction="column" gap="2" align="center" style={{ height: '100%' }}>
-          <div style={{ textAlign: 'center' }}>
-            <h2>Subscription Example</h2>
-            <p>
-              Shows how a creator can define a subscription based access to its published files. The
-              creator defines subcription fee and how long a subscription is valid for. The creator
-              can then associate encrypted files to the service. Only users who have purchased a
-              subscription (NFT) have access to decrypt the files, along with the condition that the
-              subscription must not have expired (i.e. the subscription creation timestamp plus the
-              TTL is smaller than the current clock time).
-            </p>
-          </div>
-          <Link to="/subscription-example">
-            <Button size="3">Try it</Button>
-          </Link>
-        </Flex>
-      </Card>
-    </Grid>
+    <div>
+      <h2 className="text-2xl font-bold mb-6 text-white">Seal Example Apps</h2>
+      <Grid columns="2" gap="4">
+        <Card>
+          <Flex direction="column" gap="2" align="center" style={{ height: '100%' }}>
+            <div style={{ textAlign: 'center' }}>
+              <h3>Allowlist Example</h3>
+              <p>
+                Shows how a creator can define an allowlist based access. The creator first creates an
+                allowlist and can add or remove users in the list. The creator can then associate
+                encrypted files to the allowlist. Only users in the allowlist have access to decrypt
+                the files.
+              </p>
+            </div>
+            <Link to="/allowlist-example">
+              <Button size="3">Try it</Button>
+            </Link>
+          </Flex>
+        </Card>
+        <Card>
+          <Flex direction="column" gap="2" align="center" style={{ height: '100%' }}>
+            <div style={{ textAlign: 'center' }}>
+              <h3>Subscription Example</h3>
+              <p>
+                Shows how a creator can define a subscription based access to its published files. The
+                creator defines subcription fee and how long a subscription is valid for. The creator
+                can then associate encrypted files to the service. Only users who have purchased a
+                subscription (NFT) have access to decrypt the files, along with the condition that the
+                subscription must not have expired (i.e. the subscription creation timestamp plus the
+                TTL is smaller than the current clock time).
+              </p>
+            </div>
+            <Link to="/subscription-example">
+              <Button size="3">Try it</Button>
+            </Link>
+          </Flex>
+        </Card>
+      </Grid>
+    </div>
   );
 }
 
@@ -62,46 +68,31 @@ function App() {
   const [recipientAllowlist, setRecipientAllowlist] = useState<string>('');
   const [capId, setCapId] = useState<string>('');
   return (
-    <Container>
-      <Flex position="sticky" px="4" py="2" justify="between">
-        <h1 className="text-4xl font-bold m-4 mb-8">Seal Example Apps</h1>
-        {/* <p>TODO: add seal logo</p> */}
-        <Box>
-          <ConnectButton />
-        </Box>
-      </Flex>
-      <Card style={{ marginBottom: '2rem' }}>
-        <p>
-          1. Code is available{' '}
-          <a href="https://github.com/MystenLabs/seal/tree/main/examples">here</a>.
-        </p>
-        <p>
-          2. These examples are for Testnet only. Make sure you wallet is set to Testnet and has
-          some balance (can request from <a href="https://faucet.sui.io/">faucet.sui.io</a>).
-        </p>
-        <p>
-          3. Blobs are only stored on Walrus Testnet for 1 epoch by default, older files cannot be
-          retrieved even if you have access.
-        </p>
-        <p>
-          4. Currently only image files are supported, and the UI is minimal, designed for demo
-          purposes only!
-        </p>
-        <p>
-          5. If you encounter issues when uploading to or reading from Walrus using the example frontend, it usually means the public 
-          publisher and/or aggregator configured in `vite.config.ts` is not available. This example does not guarantee performance and 
-          downstream service quality and is only for demo purpose. In your own application, consider running your own publisher and/or 
-          aggregator according to <a href="https://docs.wal.app/operator-guide/aggregator.html#operating-an-aggregator-or-publisher">the documentation</a>.
-          Or consider choosing and monitoring other reliable public publisher and aggregator from <a href="https://docs.wal.app/usage/web-api.html#public-services">the list</a>.
-        </p>
-      </Card>
-      {currentAccount ? (
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route
-              path="/allowlist-example/*"
-              element={
+    <Router>
+      <div className="App">
+        <Container>
+          <Flex position="sticky" px="4" py="2" justify="between" className="border-b border-gray-700 mb-6">
+            <div className="flex items-center space-x-4">
+              <Link to="/" className="text-decoration-none">
+                <h1 className="text-4xl font-bold text-gradient">🌊 StreamGuard</h1>
+              </Link>
+              <span className="text-gray-400 text-sm">Decentralized Live Streaming</span>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Link to="/seal-examples">
+                <Button variant="outline" size="2">Seal Examples</Button>
+              </Link>
+              <Box>
+                <ConnectButton />
+              </Box>
+            </div>
+          </Flex>
+          {currentAccount ? (
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/stream/:streamId" element={<StreamPage />} />
+              <Route path="/seal-examples" element={<SealExamplesPage />} />
+              <Route path="/allowlist-example/*" element={
                 <Routes>
                   <Route path="/" element={<CreateAllowlist />} />
                   <Route
@@ -126,11 +117,8 @@ function App() {
                     element={<Feeds suiAddress={currentAccount.address} />}
                   />
                 </Routes>
-              }
-            />
-            <Route
-              path="/subscription-example/*"
-              element={
+              } />
+              <Route path="/subscription-example/*" element={
                 <Routes>
                   <Route path="/" element={<CreateService />} />
                   <Route
@@ -155,14 +143,21 @@ function App() {
                     element={<FeedsToSubscribe suiAddress={currentAccount.address} />}
                   />
                 </Routes>
-              }
-            />
-          </Routes>
-        </BrowserRouter>
-      ) : (
-        <p>Please connect your wallet to continue</p>
-      )}
-    </Container>
+              } />
+            </Routes>
+          ) : (
+            <div className="text-center py-16">
+              <div className="text-6xl mb-4">🔗</div>
+              <div className="text-white text-2xl mb-4">Welcome to StreamGuard</div>
+              <div className="text-gray-400 mb-6">
+                Please connect your wallet to access the decentralized streaming platform
+              </div>
+              <ConnectButton />
+            </div>
+          )}
+        </Container>
+      </div>
+    </Router>
   );
 }
 
