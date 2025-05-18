@@ -1,3 +1,5 @@
+// StreamGuard Type Definitions
+
 export interface Stream {
   id: string;
   creator: string;
@@ -14,150 +16,136 @@ export interface Stream {
   totalRevenue: number;
   qualityLevels: QualityLevel[];
   isMonetized: boolean;
-  subscriptionPrice: number;
+  subscriptionPrice: number; // in MIST
   tipEnabled: boolean;
   moderationScore: number;
-  contentRating: string;
+  contentRating: 'General' | 'Teen' | 'Mature';
   tags: string[];
-}
-
-export interface StreamConfig {
-  title: string;
-  description: string;
-  category: string;
-  thumbnailWalrusId: string;
-  qualityLevels: QualityLevel[];
-  isMonetized: boolean;
-  subscriptionPrice: number;
-  tipEnabled: boolean;
-  contentRating: string;
-  tags: string[];
-}
-
-export interface ViewerSession {
-  id: string;
-  streamId: string;
-  viewer: string;
-  startedAt: number;
-  lastHeartbeat: number;
-  totalWatchTime: number;
-  qualityLevel: QualityLevel;
-  hasPaid: boolean;
-  tipsSent: number;
-}
-
-export interface StreamAnalytics {
-  id: string;
-  streamId: string;
-  totalViews: number;
-  uniqueViewers: number;
-  peakConcurrentViewers: number;
-  totalWatchTime: number;
-  averageWatchTime: number;
-  revenueGenerated: number;
-  tipsReceived: number;
-  qualityDistribution: Record<QualityLevel, number>;
-  geographicData: Record<string, number>;
+  metadataBlobId: string;
+  streamKey: string;
+  rtmpUrl: string;
 }
 
 export enum StreamStatus {
-  CREATED = 0,
-  LIVE = 1,
-  ENDED = 2,
-  ARCHIVED = 3,
+  CREATED = 'created',
+  LIVE = 'live',
+  ENDED = 'ended',
+  PAUSED = 'paused',
 }
 
 export enum QualityLevel {
-  QUALITY_240P = 0,
-  QUALITY_480P = 1,
-  QUALITY_720P = 2,
-  QUALITY_1080P = 3,
-  QUALITY_4K = 4,
+  QUALITY_360P = '360p',
+  QUALITY_480P = '480p',
+  QUALITY_720P = '720p',
+  QUALITY_1080P = '1080p',
+  QUALITY_1440P = '1440p',
+  QUALITY_4K = '4k',
 }
 
-export interface StreamEvent {
-  streamId: string;
-  creator: string;
+export interface CreatorProfile {
+  id: string;
+  address: string;
+  displayName: string;
+  bio: string;
+  avatarUrl: string;
+  followerCount: number;
+  totalEarnings: number;
+  subscriptionTiers: SubscriptionTier[];
+  isVerified: boolean;
+  createdAt: number;
+}
+
+export interface SubscriptionTier {
+  id: string;
+  name: string;
+  price: number; // in MIST
+  duration: number; // in milliseconds
+  benefits: string[];
+  isActive: boolean;
+}
+
+export interface Subscription {
+  id: string;
+  subscriber: string;
+  creatorProfile: string;
+  tierName: string;
+  startTime: number;
+  endTime: number;
+  isActive: boolean;
+}
+
+export interface Tip {
+  id: string;
+  sender: string;
+  recipient: string;
+  amount: number; // in MIST
+  message: string;
+  streamId?: string;
   timestamp: number;
 }
 
-export interface StreamCreated extends StreamEvent {
+export interface ContentNFT {
+  id: string;
+  creator: string;
   title: string;
-  category: string;
+  description: string;
+  contentType: string;
+  walrusBlobId: string;
+  thumbnailUrl?: string;
+  duration: number;
+  royaltyBps: number;
+  metadata: Record<string, string>;
+  viewCount: number;
+  totalEarnings: number;
+  createdAt: number;
 }
 
-export interface StreamStarted extends StreamEvent {}
+export interface ModerationResult {
+  id: string;
+  streamId: string;
+  moderator: string;
+  score: number;
+  flags: string[];
+  confidence: number;
+  timestamp: number;
+  isAppealed: boolean;
+}
 
-export interface StreamEnded extends StreamEvent {
-  duration: number;
-  totalViewers: number;
+export interface ChatMessage {
+  id: string;
+  sender: string;
+  senderName: string;
+  message: string;
+  timestamp: number;
+  type: 'message' | 'tip' | 'subscription' | 'system';
+  amount?: number; // for tips
+  streamId?: string; // optional stream association
+}
+
+export interface StreamMetrics {
+  viewerCount: number;
+  peakViewers: number;
+  totalViews: number;
+  averageViewDuration: number;
+  chatMessages: number;
+  tips: number;
+  subscriptions: number;
   revenue: number;
 }
 
-export interface ViewerJoined extends StreamEvent {
-  viewer: string;
+export interface WalrusBlob {
+  blobId: string;
+  size: number;
+  contentType: string;
+  uploadedAt: number;
 }
 
-export interface TipSent extends StreamEvent {
-  from: string;
-  to: string;
-  amount: number;
-  message: string;
-}
-
-export interface WalrusSegmentStored extends StreamEvent {
-  segmentNumber: number;
-  walrusBlobId: string;
-}
-
-export interface HLSManifest {
-  version: number;
-  targetDuration: number;
-  sequence: number;
-  segments: HLSSegment[];
-}
-
-export interface HLSSegment {
-  duration: number;
-  uri: string;
-  walrusBlobId: string;
-  timestamp: number;
-}
-
-export interface WalrusConfig {
-  publisherUrl: string;
-  aggregatorUrl: string;
-  epochs: number;
-}
-
-export interface StreamPlayerConfig {
-  streamId: string;
-  walrusManifestId: string;
-  autoplay?: boolean;
-  controls?: boolean;
-  muted?: boolean;
-  poster?: string;
-  qualityLevels?: QualityLevel[];
-  onReady?: (player: any) => void;
-  onPlay?: () => void;
-  onPause?: () => void;
-  onEnded?: () => void;
-  onError?: (error: Error) => void;
-}
-
-export interface CreatorDashboardData {
-  totalStreams: number;
-  totalRevenue: number;
-  totalViewers: number;
-  averageViewTime: number;
-  topStreams: Stream[];
-  recentAnalytics: StreamAnalytics[];
-}
-
-export interface ViewerDashboardData {
-  watchHistory: ViewerSession[];
-  favoriteStreams: Stream[];
-  subscriptions: Stream[];
-  totalWatchTime: number;
-  totalTipsSent: number;
+export interface StreamSettings {
+  quality: QualityLevel;
+  bitrate: number;
+  framerate: number;
+  enableChat: boolean;
+  enableTips: boolean;
+  enableSubscriptions: boolean;
+  moderationLevel: 'strict' | 'moderate' | 'relaxed';
 } 

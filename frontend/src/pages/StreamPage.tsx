@@ -1,442 +1,427 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { createPortal } from 'react-dom';
-import { Container } from '@radix-ui/themes';
-import StreamPlayer from '../components/video/StreamPlayer';
-import { useCurrentStream, useCurrentSession, useStreamStore } from '../stores/streamStore';
-import { Stream, QualityLevel } from '../types/stream';
-import { walrusService } from '../lib/walrus';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { Container, Button, Card, Badge } from '@radix-ui/themes';
+import { Users, Heart, Share2, DollarSign } from 'lucide-react';
+import { useStreamStore } from '../stores/streamStore';
+import { Stream, StreamStatus, ChatMessage, QualityLevel } from '../types/stream';
+import { StreamPlayer } from '../components/video/StreamPlayer';
+import { LiveChat } from '../components/stream/LiveChat';
+import TipModal from '../components/stream/TipModal';
+import ErrorBoundary from '../components/common/ErrorBoundary';
+import { formatSuiAmount, sendTip, subscribeToCreator } from '../lib/sui';
+import { toast } from 'react-hot-toast';
 
-interface StreamPageProps {}
-
-export const StreamPage: React.FC<StreamPageProps> = () => {
+const StreamPage: React.FC = () => {
   const { streamId } = useParams<{ streamId: string }>();
   const navigate = useNavigate();
+  const currentAccount = useCurrentAccount();
+  const { getStreamById, addChatMessage, chatMessages } = useStreamStore();
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   
-  const currentStream = useCurrentStream();
-  const currentSession = useCurrentSession();
-  const { 
-    setCurrentStream, 
-    joinStream, 
-    leaveStream, 
-    sendTip, 
-    updateViewerCount,
-    streams 
-  } = useStreamStore();
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [stream, setStream] = useState<Stream | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
   const [showTipModal, setShowTipModal] = useState(false);
-  const [tipAmount, setTipAmount] = useState('');
-  const [tipMessage, setTipMessage] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load stream data
   useEffect(() => {
     if (!streamId) {
       navigate('/');
       return;
     }
 
-    const loadStream = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+    console.log('🔍 Looking for stream with ID:', streamId);
 
-        // Get stream from store or fetch it
-        let stream = streams[streamId];
-        if (!stream) {
-          // In a real app, this would fetch from API
-          setError('Stream not found');
-          return;
-        }
-
-        setCurrentStream(stream);
-        
-        // Join the stream
-        await joinStream(streamId);
-        
+    // Try to get stream from store first
+    const foundStream = getStreamById(streamId);
+    if (foundStream) {
+      console.log('✅ Found real stream:', foundStream);
+      setStream(foundStream);
+      setIsLoading(false);
+    } else {
+      console.log('⚠️ Stream not found in store, checking for demo stream...');
+      
+      // For demo purposes, create a demo stream if not found
+      // This handles cases where someone navigates directly to a demo stream URL
+      if (streamId.startsWith('demo_')) {
+        const demoStream: Stream = {
+          id: streamId,
+          creator: '0x54fe76c4c8b8b8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8',
+          title: 'Live Stream Demo',
+          description: 'This is a demo stream showing StreamGuard capabilities',
+          category: 'Technology',
+          thumbnailWalrusId: '', // Empty for placeholder
+          hlsManifestWalrusId: 'demo_manifest',
+          status: StreamStatus.LIVE,
+          createdAt: Date.now() - 3600000,
+          startedAt: Date.now() - 1800000,
+          endedAt: 0,
+          viewerCount: 1337,
+          totalRevenue: 25000000000, // 25 SUI
+          qualityLevels: [QualityLevel.QUALITY_720P, QualityLevel.QUALITY_1080P],
+          isMonetized: true,
+          subscriptionPrice: 10000000000, // 0.01 SUI
+          tipEnabled: true,
+          moderationScore: 95,
+          contentRating: 'General',
+          tags: ['demo', 'sui', 'blockchain', 'streaming'],
+          metadataBlobId: 'demo_meta',
+          streamKey: 'demo_key',
+          rtmpUrl: 'rtmp://demo.streamguard.io/live/demo_key',
+        };
+        console.log('📺 Created demo stream:', demoStream);
+        setStream(demoStream);
         setIsLoading(false);
-      } catch (error) {
-        console.error('Failed to load stream:', error);
-        setError(`Failed to load stream: ${(error as Error).message}`);
+      } else {
+        // Real stream not found
+        console.log('❌ Real stream not found for ID:', streamId);
         setIsLoading(false);
       }
-    };
-
-    loadStream();
-
-    // Cleanup on unmount
-    return () => {
-      leaveStream();
-    };
-  }, [streamId, streams, setCurrentStream, joinStream, leaveStream, navigate]);
-
-  // Mock chat messages
-  useEffect(() => {
-    if (currentStream) {
-      const mockMessages: ChatMessage[] = [
-        {
-          id: '1',
-          user: 'viewer1',
-          message: 'Great stream! 🔥',
-          timestamp: Date.now() - 60000,
-          type: 'message',
-        },
-        {
-          id: '2',
-          user: 'viewer2',
-          message: 'Just tipped 0.1 SUI! Keep it up!',
-          timestamp: Date.now() - 30000,
-          type: 'tip',
-          amount: 0.1,
-        },
-        {
-          id: '3',
-          user: 'viewer3',
-          message: 'What quality are you streaming at?',
-          timestamp: Date.now() - 15000,
-          type: 'message',
-        },
-      ];
-      setChatMessages(mockMessages);
     }
-  }, [currentStream]);
+  }, [streamId, getStreamById, navigate]);
 
-  const handleTipSubmit = async () => {
-    if (!currentStream || !tipAmount) return;
+  const getManifestUrl = (stream: Stream): string => {
+    if (!stream.hlsManifestWalrusId) {
+      console.warn('⚠️ No HLS manifest Walrus ID available');
+      return '';
+    }
+
+    // For pure demo streams (only those with 'demo_' prefix), return empty
+    if (stream.hlsManifestWalrusId.startsWith('demo_')) {
+      console.log('📺 Demo manifest ID detected:', stream.hlsManifestWalrusId);
+      // For development, we can't actually serve HLS content, so return empty
+      return '';
+    }
+
+    // For real manifest IDs (including those starting with 'manifest_'), try Walrus
+    const walrusUrl = `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${stream.hlsManifestWalrusId}`;
+    console.log('🔗 Real Walrus manifest URL:', walrusUrl);
+    return walrusUrl;
+  };
+
+  const handleSendTip = async (amount: number, message: string) => {
+    if (!currentAccount || !stream) return;
 
     try {
-      const amount = parseFloat(tipAmount) * 1000000000; // Convert SUI to MIST
-      await sendTip(currentStream.id, amount, tipMessage);
+      const tipAmountMist = (amount * 1000000000).toString(); // Convert SUI to MIST
       
-      // Add tip message to chat
-      const tipChatMessage: ChatMessage = {
-        id: Date.now().toString(),
-        user: 'You',
-        message: tipMessage || `Tipped ${tipAmount} SUI`,
-        timestamp: Date.now(),
-        type: 'tip',
-        amount: parseFloat(tipAmount),
-      };
-      setChatMessages(prev => [...prev, tipChatMessage]);
+      // Use the current user's address as the profile ID
+      // In a real app, this would be fetched from a user profile system
+      const userProfileId = currentAccount.address;
       
-      setShowTipModal(false);
-      setTipAmount('');
-      setTipMessage('');
+      console.log('💰 Sending tip:', {
+        amount: amount,
+        amountMist: tipAmountMist,
+        message: message,
+        streamId: stream.id,
+        userProfileId: userProfileId
+      });
+      
+      const tx = await sendTip(userProfileId, tipAmountMist, message, stream.id);
+      
+      signAndExecuteTransaction(
+        { transaction: tx },
+        {
+          onSuccess: () => {
+            toast.success(`Tip of ${amount} SUI sent successfully!`);
+            setShowTipModal(false);
+            
+            // Add tip message to chat
+            const tipMessage: ChatMessage = {
+              id: `tip_${Date.now()}`,
+              sender: currentAccount.address,
+              senderName: `${currentAccount.address.slice(0, 6)}...${currentAccount.address.slice(-4)}`,
+              message: `💰 Tipped ${amount} SUI${message ? `: ${message}` : ''}`,
+              timestamp: Date.now(),
+              type: 'tip',
+              streamId: stream.id,
+            };
+            addChatMessage(tipMessage);
+          },
+          onError: (error) => {
+            console.error('Tip failed:', error);
+            console.error('💸 Tip error details:', JSON.stringify(error, null, 2));
+            toast.error('Failed to send tip. Please try again.');
+          },
+        }
+      );
     } catch (error) {
-      console.error('Failed to send tip:', error);
+      console.error('Error sending tip:', error);
+      console.error('💸 Tip preparation error:', error);
+      toast.error('Failed to prepare tip. Please try again.');
     }
   };
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+  const handleSubscribe = async () => {
+    if (!currentAccount || !stream) return;
+
+    try {
+      // Use the current user's address as the profile ID
+      const userProfileId = currentAccount.address;
+      
+      console.log('📺 Subscribing to creator:', {
+        userProfileId: userProfileId,
+        creatorId: stream.creator,
+        subscriptionType: 'Basic',
+        price: stream.subscriptionPrice.toString()
+      });
+      
+      const tx = await subscribeToCreator(
+        userProfileId,
+        'Basic',
+        stream.subscriptionPrice.toString()
+      );
+      
+      signAndExecuteTransaction(
+        { transaction: tx },
+        {
+          onSuccess: () => {
+            toast.success('Subscribed successfully!');
+            setIsSubscribed(true);
+            
+            // Add subscription message to chat
+            const subMessage: ChatMessage = {
+              id: `sub_${Date.now()}`,
+              sender: currentAccount.address,
+              senderName: `${currentAccount.address.slice(0, 6)}...${currentAccount.address.slice(-4)}`,
+              message: `🌟 Subscribed to the stream!`,
+              timestamp: Date.now(),
+              type: 'subscription',
+              streamId: stream.id,
+            };
+            addChatMessage(subMessage);
+          },
+          onError: (error) => {
+            console.error('Subscription failed:', error);
+            console.error('📺 Subscription error details:', JSON.stringify(error, null, 2));
+            toast.error('Failed to subscribe. Please try again.');
+          },
+        }
+      );
+    } catch (error) {
+      console.error('Error subscribing:', error);
+      console.error('📺 Subscription preparation error:', error);
+      toast.error('Failed to prepare subscription. Please try again.');
+    }
+  };
+
+  const handleSendChatMessage = () => {
+    if (!chatInput.trim() || !currentAccount) return;
 
     const message: ChatMessage = {
-      id: Date.now().toString(),
-      user: 'You',
-      message: newMessage,
+      id: `msg_${Date.now()}`,
+      sender: currentAccount.address,
+      senderName: `${currentAccount.address.slice(0, 6)}...${currentAccount.address.slice(-4)}`,
+      message: chatInput.trim(),
       timestamp: Date.now(),
       type: 'message',
+      streamId: stream?.id,
     };
 
-    setChatMessages(prev => [...prev, message]);
-    setNewMessage('');
+    addChatMessage(message);
+    setChatInput('');
   };
 
-  const formatViewerCount = (count: number): string => {
-    if (count >= 1000000) {
-      return `${(count / 1000000).toFixed(1)}M`;
-    } else if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}K`;
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: stream?.title || 'StreamGuard Live Stream',
+          text: `Watch "${stream?.title}" on StreamGuard`,
+          url: window.location.href,
+        });
+      } catch (error) {
+        console.log('Error sharing:', error);
+      }
+    } else {
+      // Fallback to clipboard
+      navigator.clipboard.writeText(window.location.href);
+      toast.success('Stream URL copied to clipboard!');
     }
-    return count.toString();
-  };
-
-  const formatDuration = (startTime: number): string => {
-    const duration = Date.now() - startTime;
-    const hours = Math.floor(duration / (1000 * 60 * 60));
-    const minutes = Math.floor((duration % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
   };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mb-4"></div>
-          <div className="text-white text-xl">Loading stream...</div>
-        </div>
+        <div className="text-white text-xl">Loading stream...</div>
       </div>
     );
   }
 
-  if (error || !currentStream) {
+  if (!stream) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <div className="text-white text-2xl mb-4">Stream Error</div>
-          <div className="text-gray-400 mb-6">{error || 'Stream not found'}</div>
-          <button
-            onClick={() => navigate('/')}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Back to Home
-          </button>
-        </div>
+        <Card className="p-8 text-center bg-gray-800 border-gray-700">
+          <h2 className="text-xl font-semibold text-white mb-4">Stream Not Found</h2>
+          <p className="text-gray-400 mb-6">The stream you're looking for doesn't exist or has ended.</p>
+          <Button onClick={() => navigate('/')} className="bg-blue-600 hover:bg-blue-700">
+            Go Home
+          </Button>
+        </Card>
       </div>
     );
   }
+
+  const manifestUrl = getManifestUrl(stream);
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <div className="container mx-auto px-4 py-6">
+      <Container className="py-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Main video player */}
+          {/* Main Video Player */}
           <div className="lg:col-span-3">
-            <div className="bg-black rounded-lg overflow-hidden">
-              <StreamPlayer
-                streamId={currentStream.id}
-                walrusManifestId={currentStream.hlsManifestWalrusId}
-                autoplay={true}
-                controls={true}
-                qualityLevels={currentStream.qualityLevels}
-                className="w-full"
-                width={1280}
-                height={720}
-                onError={(error) => setError(error.message)}
-              />
+            <div className="bg-black rounded-lg overflow-hidden mb-4">
+              <ErrorBoundary>
+                <StreamPlayer
+                  manifestUrl={manifestUrl}
+                  title={stream.title}
+                  isLive={stream.status === StreamStatus.LIVE}
+                />
+              </ErrorBoundary>
             </div>
 
-            {/* Stream info */}
-            <div className="mt-6 bg-gray-800 rounded-lg p-6">
+            {/* Stream Info */}
+            <Card className="p-6 bg-gray-800 border-gray-700">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
-                  <h1 className="text-2xl font-bold text-white mb-2">
-                    {currentStream.title}
-                  </h1>
-                  <div className="flex items-center space-x-4 text-gray-400 text-sm">
-                    <span className="flex items-center">
-                      <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
-                      LIVE
-                    </span>
-                    <span>👁 {formatViewerCount(currentStream.viewerCount)} viewers</span>
-                    <span>⏱ {formatDuration(currentStream.startedAt)}</span>
-                    <span className="bg-blue-900 bg-opacity-50 px-2 py-1 rounded">
-                      {currentStream.category}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Action buttons */}
-                <div className="flex space-x-3">
-                  {currentStream.tipEnabled && (
-                    <button
-                      onClick={() => setShowTipModal(true)}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
-                    >
-                      💝 Tip Creator
-                    </button>
-                  )}
-                  <button className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">
-                    🔗 Share
-                  </button>
-                </div>
-              </div>
-
-              {/* Creator info */}
-              <div className="flex items-center justify-between py-4 border-t border-gray-700">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
-                    {currentStream.creator.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="ml-3">
-                    <div className="text-white font-semibold">
-                      {currentStream.creator.slice(0, 8)}...{currentStream.creator.slice(-4)}
+                  <h1 className="text-2xl font-bold text-white mb-2">{stream.title}</h1>
+                  <p className="text-gray-400 mb-4">{stream.description}</p>
+                  
+                  <div className="flex items-center space-x-4 text-sm text-gray-400">
+                    <div className="flex items-center space-x-1">
+                      <Users size={16} />
+                      <span>{stream.viewerCount.toLocaleString()} viewers</span>
                     </div>
-                    <div className="text-gray-400 text-sm">Creator</div>
+                    <Badge color="blue">{stream.category}</Badge>
+                    <Badge color={stream.status === StreamStatus.LIVE ? 'red' : 'gray'}>
+                      {stream.status === StreamStatus.LIVE ? '🔴 LIVE' : 'OFFLINE'}
+                    </Badge>
+                    <Badge color="green">
+                      {stream.moderationScore}% Safe
+                    </Badge>
                   </div>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  Follow
-                </button>
+
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="2"
+                    onClick={handleShare}
+                    className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                  >
+                    <Share2 size={16} />
+                  </Button>
+                  <Button
+                    variant={isFollowing ? 'solid' : 'outline'}
+                    size="2"
+                    onClick={() => setIsFollowing(!isFollowing)}
+                    className={isFollowing ? 'bg-red-600 hover:bg-red-700' : 'border-gray-600 text-gray-300 hover:bg-gray-700'}
+                  >
+                    <Heart size={16} className={isFollowing ? 'fill-current' : ''} />
+                    {isFollowing ? 'Following' : 'Follow'}
+                  </Button>
+                </div>
               </div>
 
-              {/* Description */}
-              {currentStream.description && (
-                <div className="mt-4">
-                  <h3 className="text-white font-semibold mb-2">Description</h3>
-                  <p className="text-gray-300">{currentStream.description}</p>
+              {/* Creator Info */}
+              <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
+                    {stream.creator.slice(2, 4).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold">
+                      {stream.creator.slice(0, 6)}...{stream.creator.slice(-4)}
+                    </h3>
+                    <p className="text-gray-400 text-sm">Creator</p>
+                  </div>
                 </div>
-              )}
+
+                <div className="flex items-center space-x-2">
+                  {stream.isMonetized && !isSubscribed && (
+                    <Button
+                      onClick={handleSubscribe}
+                      disabled={!currentAccount}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      Subscribe ({formatSuiAmount(stream.subscriptionPrice)} SUI)
+                    </Button>
+                  )}
+                  {isSubscribed && (
+                    <Badge color="green">✓ Subscribed</Badge>
+                  )}
+                  {stream.tipEnabled && (
+                    <Button
+                      onClick={() => setShowTipModal(true)}
+                      disabled={!currentAccount}
+                      className="bg-yellow-600 hover:bg-yellow-700"
+                    >
+                      <DollarSign size={16} className="mr-1" />
+                      Tip Creator
+                    </Button>
+                  )}
+                </div>
+              </div>
 
               {/* Tags */}
-              {currentStream.tags.length > 0 && (
+              {stream.tags.length > 0 && (
                 <div className="mt-4">
-                  <h3 className="text-white font-semibold mb-2">Tags</h3>
                   <div className="flex flex-wrap gap-2">
-                    {currentStream.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="bg-gray-700 text-gray-300 px-3 py-1 rounded-full text-sm"
-                      >
+                    {stream.tags.map((tag, index) => (
+                      <Badge key={index} variant="outline" className="text-gray-400 border-gray-600">
                         #{tag}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 </div>
               )}
-            </div>
+
+              {/* Debug Info for Development */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mt-4 p-3 bg-gray-900 rounded-lg">
+                  <h4 className="text-yellow-400 font-semibold mb-2">🔧 Development Info</h4>
+                  <div className="space-y-1 text-xs text-gray-400">
+                    <div>Stream ID: {stream.id}</div>
+                    <div>Status: {stream.status}</div>
+                    <div>Manifest ID: {stream.hlsManifestWalrusId}</div>
+                    <div>Manifest URL: {manifestUrl || 'Not available'}</div>
+                    <div>Thumbnail ID: {stream.thumbnailWalrusId || 'Using placeholder'}</div>
+                    {stream.thumbnailWalrusId && (
+                      <div>Thumbnail URL: https://aggregator.walrus-testnet.walrus.space/v1/blobs/{stream.thumbnailWalrusId}</div>
+                    )}
+                    <div className="mt-2 p-2 bg-blue-900 bg-opacity-30 rounded">
+                      <div className="text-blue-300 font-medium">Walrus URL Format:</div>
+                      <div className="text-blue-200 text-xs">https://aggregator.walrus-testnet.walrus.space/v1/blobs/&lt;blob-id&gt;</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
           </div>
 
-          {/* Chat sidebar */}
+          {/* Live Chat */}
           <div className="lg:col-span-1">
-            <div className="bg-gray-800 rounded-lg h-full flex flex-col">
-              <div className="p-4 border-b border-gray-700">
-                <h3 className="text-white font-semibold">Live Chat</h3>
-                <div className="text-gray-400 text-sm">
-                  {formatViewerCount(currentStream.viewerCount)} viewers
-                </div>
-              </div>
-
-              {/* Chat messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {chatMessages.map((message) => (
-                  <ChatMessageComponent key={message.id} message={message} />
-                ))}
-              </div>
-
-              {/* Chat input */}
-              <div className="p-4 border-t border-gray-700">
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                    placeholder="Say something..."
-                    className="flex-1 bg-gray-700 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Send
-                  </button>
-                </div>
-              </div>
-            </div>
+            <LiveChat
+              messages={chatMessages.filter(msg => !msg.streamId || msg.streamId === stream.id)}
+              onSendMessage={handleSendChatMessage}
+              chatInput={chatInput}
+              setChatInput={setChatInput}
+              isConnected={!!currentAccount}
+              streamId={stream.id}
+            />
           </div>
         </div>
-      </div>
+      </Container>
 
       {/* Tip Modal */}
-      {showTipModal && createPortal(
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-white text-xl font-semibold mb-4">Send Tip</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Amount (SUI)
-                </label>
-                <input
-                  type="number"
-                  step="0.001"
-                  value={tipAmount}
-                  onChange={(e) => setTipAmount(e.target.value)}
-                  placeholder="0.001"
-                  className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Message (optional)
-                </label>
-                <textarea
-                  value={tipMessage}
-                  onChange={(e) => setTipMessage(e.target.value)}
-                  placeholder="Great stream!"
-                  rows={3}
-                  className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => setShowTipModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleTipSubmit}
-                disabled={!tipAmount}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Send Tip
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-};
-
-// Chat message types
-interface ChatMessage {
-  id: string;
-  user: string;
-  message: string;
-  timestamp: number;
-  type: 'message' | 'tip' | 'system';
-  amount?: number;
-}
-
-const ChatMessageComponent: React.FC<{ message: ChatMessage }> = ({ message }) => {
-  const formatTime = (timestamp: number): string => {
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
-  const getMessageStyle = () => {
-    switch (message.type) {
-      case 'tip':
-        return 'border-l-4 border-green-500 bg-green-900 bg-opacity-20';
-      case 'system':
-        return 'border-l-4 border-blue-500 bg-blue-900 bg-opacity-20';
-      default:
-        return '';
-    }
-  };
-
-  return (
-    <div className={`p-2 rounded ${getMessageStyle()}`}>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-blue-400 text-sm font-medium">{message.user}</span>
-        <span className="text-gray-500 text-xs">{formatTime(message.timestamp)}</span>
-      </div>
-      <div className="text-gray-300 text-sm">
-        {message.type === 'tip' && message.amount && (
-          <span className="text-green-400 font-medium">
-            💝 Tipped {message.amount} SUI: 
-          </span>
-        )}
-        {message.message}
-      </div>
+      <TipModal
+        isOpen={showTipModal}
+        onClose={() => setShowTipModal(false)}
+        onTip={handleSendTip}
+        creatorName={`${stream.creator.slice(0, 6)}...${stream.creator.slice(-4)}`}
+      />
     </div>
   );
 };

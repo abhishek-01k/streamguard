@@ -1,280 +1,273 @@
-import axios from 'axios';
-import { HLSManifest, HLSSegment, WalrusConfig } from '../types/stream';
+import { WALRUS_CONFIG } from '../constants/contracts';
 
-// Walrus configuration
-const WALRUS_CONFIG: WalrusConfig = {
-  publisherUrl: (import.meta as any).env?.VITE_WALRUS_PUBLISHER_URL || 'https://publisher.walrus-testnet.walrus.space',
-  aggregatorUrl: (import.meta as any).env?.VITE_WALRUS_AGGREGATOR_URL || 'https://aggregator.walrus-testnet.walrus.space',
-  epochs: 5, // Number of epochs to store data
-};
-
-export class WalrusService {
+// Walrus storage utilities for StreamGuard
+export class WalrusStorage {
   private publisherUrl: string;
   private aggregatorUrl: string;
   private epochs: number;
 
-  constructor(config: WalrusConfig = WALRUS_CONFIG) {
-    this.publisherUrl = config.publisherUrl;
-    this.aggregatorUrl = config.aggregatorUrl;
-    this.epochs = config.epochs;
+  constructor() {
+    this.publisherUrl = WALRUS_CONFIG.PUBLISHER_URL;
+    this.aggregatorUrl = WALRUS_CONFIG.AGGREGATOR_URL;
+    this.epochs = WALRUS_CONFIG.EPOCHS;
   }
 
-  /**
-   * Store data on Walrus and return the blob ID
-   */
-  async storeBlob(data: Uint8Array | string): Promise<string> {
+  // Store a blob on Walrus
+  async storeBlob(data: Uint8Array | File): Promise<string> {
     try {
       const formData = new FormData();
       
-      // Convert string to Uint8Array if needed
-      const blobData = typeof data === 'string' 
-        ? new TextEncoder().encode(data)
-        : data;
-      
-      const blob = new Blob([blobData]);
-      formData.append('file', blob);
-
-      const response = await axios.put(
-        `${this.publisherUrl}/v1/store?epochs=${this.epochs}`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          timeout: 30000, // 30 second timeout
-        }
-      );
-
-      if (response.data?.newlyCreated?.blobObject?.blobId) {
-        return response.data.newlyCreated.blobObject.blobId;
-      } else if (response.data?.alreadyCertified?.blobId) {
-        return response.data.alreadyCertified.blobId;
+      if (data instanceof File) {
+        formData.append('file', data);
       } else {
-        throw new Error('Invalid response from Walrus publisher');
+        const blob = new Blob([data]);
+        formData.append('file', blob);
       }
+
+      const response = await fetch(`${this.publisherUrl}/v1/blobs?epochs=${this.epochs}`, {
+        method: 'PUT',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to store blob: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result.newlyCreated?.blobObject?.blobId || result.alreadyCertified?.blobId;
     } catch (error) {
-      console.error('Failed to store blob on Walrus:', error);
-      throw new Error(`Walrus storage failed: ${(error as Error).message}`);
+      console.error('Error storing blob on Walrus:', error);
+      throw error;
     }
   }
 
-  /**
-   * Retrieve data from Walrus using blob ID
-   */
+  // Retrieve a blob from Walrus
   async retrieveBlob(blobId: string): Promise<Uint8Array> {
     try {
-      const response = await axios.get(
-        `${this.aggregatorUrl}/v1/${blobId}`,
-        {
-          responseType: 'arraybuffer',
-          timeout: 30000, // 30 second timeout
-        }
-      );
+      const response = await fetch(`${this.aggregatorUrl}/v1/blobs/${blobId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to retrieve blob: ${response.statusText}`);
+      }
 
-      return new Uint8Array(response.data);
+      const arrayBuffer = await response.arrayBuffer();
+      return new Uint8Array(arrayBuffer);
     } catch (error) {
-      console.error('Failed to retrieve blob from Walrus:', error);
-      throw new Error(`Walrus retrieval failed: ${(error as Error).message}`);
+      console.error('Error retrieving blob from Walrus:', error);
+      throw error;
     }
   }
 
-  /**
-   * Retrieve data as text from Walrus
-   */
-  async retrieveBlobAsText(blobId: string): Promise<string> {
-    const data = await this.retrieveBlob(blobId);
-    return new TextDecoder().decode(data);
-  }
-
-  /**
-   * Retrieve data as JSON from Walrus
-   */
-  async retrieveBlobAsJson<T>(blobId: string): Promise<T> {
-    const text = await this.retrieveBlobAsText(blobId);
-    return JSON.parse(text);
-  }
-
-  /**
-   * Store HLS manifest on Walrus
-   */
-  async storeHLSManifest(manifest: HLSManifest): Promise<string> {
-    const manifestText = this.generateM3U8Manifest(manifest);
-    return await this.storeBlob(manifestText);
-  }
-
-  /**
-   * Retrieve HLS manifest from Walrus
-   */
-  async retrieveHLSManifest(blobId: string): Promise<HLSManifest> {
-    return await this.retrieveBlobAsJson<HLSManifest>(blobId);
-  }
-
-  /**
-   * Store video segment on Walrus
-   */
-  async storeVideoSegment(segmentData: Uint8Array): Promise<string> {
-    return await this.storeBlob(segmentData);
-  }
-
-  /**
-   * Generate M3U8 playlist content from HLS manifest
-   */
-  private generateM3U8Manifest(manifest: HLSManifest): string {
-    let m3u8Content = '#EXTM3U\n';
-    m3u8Content += `#EXT-X-VERSION:${manifest.version}\n`;
-    m3u8Content += `#EXT-X-TARGETDURATION:${manifest.targetDuration}\n`;
-    m3u8Content += `#EXT-X-MEDIA-SEQUENCE:${manifest.sequence}\n`;
-
-    for (const segment of manifest.segments) {
-      m3u8Content += `#EXTINF:${segment.duration},\n`;
-      // Use Walrus aggregator URL for segment retrieval
-      m3u8Content += `${this.aggregatorUrl}/v1/${segment.walrusBlobId}\n`;
-    }
-
-    return m3u8Content;
-  }
-
-  /**
-   * Create a new HLS manifest for a stream
-   */
-  createNewManifest(): HLSManifest {
-    return {
-      version: 3,
-      targetDuration: 10,
-      sequence: 0,
-      segments: [],
-    };
-  }
-
-  /**
-   * Add a segment to an existing manifest
-   */
-  addSegmentToManifest(
-    manifest: HLSManifest,
-    segmentBlobId: string,
-    duration: number
-  ): HLSManifest {
-    const newSegment: HLSSegment = {
-      duration,
-      uri: `${this.aggregatorUrl}/v1/${segmentBlobId}`,
-      walrusBlobId: segmentBlobId,
-      timestamp: Date.now(),
-    };
-
-    const updatedManifest = {
-      ...manifest,
-      segments: [...manifest.segments, newSegment],
-      sequence: manifest.sequence + 1,
-    };
-
-    // Keep only the last 10 segments for live streaming
-    if (updatedManifest.segments.length > 10) {
-      updatedManifest.segments = updatedManifest.segments.slice(-10);
-    }
-
-    return updatedManifest;
-  }
-
-  /**
-   * Get the Walrus URL for a blob ID
-   */
+  // Get blob URL for direct access
   getBlobUrl(blobId: string): string {
     return `${this.aggregatorUrl}/v1/${blobId}`;
   }
 
-  /**
-   * Check if Walrus service is available
-   */
-  async healthCheck(): Promise<boolean> {
+  // Store video segment for live streaming
+  async storeVideoSegment(
+    segment: Uint8Array,
+    streamId: string,
+    segmentIndex: number
+  ): Promise<string> {
     try {
-      // Try to access the publisher endpoint
-      await axios.get(`${this.publisherUrl}/v1/info`, { timeout: 5000 });
-      return true;
+      const segmentBlob = new Blob([segment], { type: 'video/mp2t' });
+      const file = new File([segmentBlob], `${streamId}_${segmentIndex}.ts`);
+      
+      return await this.storeBlob(file);
     } catch (error) {
-      console.warn('Walrus health check failed:', error);
+      console.error('Error storing video segment:', error);
+      throw error;
+    }
+  }
+
+  // Store HLS manifest
+  async storeManifest(manifest: string, streamId: string): Promise<string> {
+    try {
+      const manifestBlob = new Blob([manifest], { type: 'application/vnd.apple.mpegurl' });
+      const file = new File([manifestBlob], `${streamId}.m3u8`);
+      
+      return await this.storeBlob(file);
+    } catch (error) {
+      console.error('Error storing manifest:', error);
+      throw error;
+    }
+  }
+
+  // Store thumbnail image
+  async storeThumbnail(imageFile: File): Promise<string> {
+    try {
+      return await this.storeBlob(imageFile);
+    } catch (error) {
+      console.error('Error storing thumbnail:', error);
+      throw error;
+    }
+  }
+
+  // Create HLS manifest for live streaming
+  createHLSManifest(segments: Array<{ blobId: string; duration: number }>): string {
+    const manifest = [
+      '#EXTM3U',
+      '#EXT-X-VERSION:3',
+      '#EXT-X-TARGETDURATION:10',
+      '#EXT-X-MEDIA-SEQUENCE:0',
+      ''
+    ];
+
+    segments.forEach((segment, index) => {
+      manifest.push(`#EXTINF:${segment.duration.toFixed(3)},`);
+      manifest.push(this.getBlobUrl(segment.blobId));
+    });
+
+    manifest.push('#EXT-X-ENDLIST');
+    return manifest.join('\n');
+  }
+
+  // Update live manifest with new segment
+  updateLiveManifest(
+    existingManifest: string,
+    newSegment: { blobId: string; duration: number }
+  ): string {
+    const lines = existingManifest.split('\n');
+    const endListIndex = lines.findIndex(line => line === '#EXT-X-ENDLIST');
+    
+    if (endListIndex !== -1) {
+      // Remove #EXT-X-ENDLIST for live stream
+      lines.splice(endListIndex, 1);
+    }
+
+    // Add new segment
+    lines.push(`#EXTINF:${newSegment.duration.toFixed(3)},`);
+    lines.push(this.getBlobUrl(newSegment.blobId));
+
+    return lines.join('\n');
+  }
+
+  // Store stream metadata
+  async storeStreamMetadata(metadata: {
+    title: string;
+    description: string;
+    category: string;
+    creator: string;
+    thumbnailBlobId?: string;
+    duration?: number;
+    quality?: string;
+  }): Promise<string> {
+    try {
+      const metadataJson = JSON.stringify(metadata, null, 2);
+      const metadataBlob = new Blob([metadataJson], { type: 'application/json' });
+      const file = new File([metadataBlob], 'metadata.json');
+      
+      return await this.storeBlob(file);
+    } catch (error) {
+      console.error('Error storing stream metadata:', error);
+      throw error;
+    }
+  }
+
+  // Retrieve stream metadata
+  async retrieveStreamMetadata(metadataBlobId: string): Promise<any> {
+    try {
+      const data = await this.retrieveBlob(metadataBlobId);
+      const jsonString = new TextDecoder().decode(data);
+      return JSON.parse(jsonString);
+    } catch (error) {
+      console.error('Error retrieving stream metadata:', error);
+      throw error;
+    }
+  }
+
+  // Check if blob exists
+  async blobExists(blobId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.aggregatorUrl}/v1/${blobId}`, {
+        method: 'HEAD'
+      });
+      return response.ok;
+    } catch (error) {
       return false;
     }
   }
 
-  /**
-   * Get storage statistics
-   */
-  async getStorageStats(): Promise<{
-    totalBlobs: number;
-    totalSize: number;
-    availableEpochs: number;
-  }> {
+  // Get blob info
+  async getBlobInfo(blobId: string): Promise<any> {
     try {
-      const response = await axios.get(`${this.publisherUrl}/v1/info`);
-      return {
-        totalBlobs: response.data?.totalBlobs || 0,
-        totalSize: response.data?.totalSize || 0,
-        availableEpochs: response.data?.availableEpochs || 0,
-      };
+      const response = await fetch(`${this.aggregatorUrl}/v1/info/${blobId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get blob info: ${response.statusText}`);
+      }
+
+      return await response.json();
     } catch (error) {
-      console.error('Failed to get storage stats:', error);
-      return {
-        totalBlobs: 0,
-        totalSize: 0,
-        availableEpochs: 0,
-      };
+      console.error('Error getting blob info:', error);
+      throw error;
     }
-  }
-
-  /**
-   * Batch store multiple segments
-   */
-  async batchStoreSegments(segments: Uint8Array[]): Promise<string[]> {
-    const promises = segments.map(segment => this.storeVideoSegment(segment));
-    return await Promise.all(promises);
-  }
-
-  /**
-   * Create a master playlist for adaptive bitrate streaming
-   */
-  generateMasterPlaylist(qualityLevels: Array<{
-    bandwidth: number;
-    resolution: string;
-    manifestBlobId: string;
-  }>): string {
-    let masterPlaylist = '#EXTM3U\n';
-    masterPlaylist += '#EXT-X-VERSION:3\n';
-
-    for (const quality of qualityLevels) {
-      masterPlaylist += `#EXT-X-STREAM-INF:BANDWIDTH=${quality.bandwidth},RESOLUTION=${quality.resolution}\n`;
-      masterPlaylist += `${this.aggregatorUrl}/v1/${quality.manifestBlobId}\n`;
-    }
-
-    return masterPlaylist;
-  }
-
-  /**
-   * Store master playlist for adaptive streaming
-   */
-  async storeMasterPlaylist(qualityLevels: Array<{
-    bandwidth: number;
-    resolution: string;
-    manifestBlobId: string;
-  }>): Promise<string> {
-    const masterPlaylist = this.generateMasterPlaylist(qualityLevels);
-    return await this.storeBlob(masterPlaylist);
   }
 }
 
-// Export singleton instance
-export const walrusService = new WalrusService();
+// Create a singleton instance
+export const walrusStorage = new WalrusStorage();
 
-// Utility functions
-export const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-};
+// Utility functions for common operations
+export async function uploadThumbnail(file: File): Promise<string> {
+  return walrusStorage.storeThumbnail(file);
+}
 
-export const calculateStorageCost = (sizeInBytes: number, epochs: number): number => {
-  // Approximate cost calculation (this would be based on actual Walrus pricing)
-  const costPerBytePerEpoch = 0.000001; // Example rate
-  return sizeInBytes * epochs * costPerBytePerEpoch;
-}; 
+export async function uploadVideoFile(file: File): Promise<string> {
+  return walrusStorage.storeBlob(file);
+}
+
+export function getVideoUrl(blobId: string): string {
+  return walrusStorage.getBlobUrl(blobId);
+}
+
+export function getThumbnailUrl(blobId: string): string {
+  return walrusStorage.getBlobUrl(blobId);
+}
+
+// Stream processing utilities
+export class StreamProcessor {
+  private walrus: WalrusStorage;
+  private segments: Array<{ blobId: string; duration: number }> = [];
+
+  constructor() {
+    this.walrus = new WalrusStorage();
+  }
+
+  // Process video chunk for live streaming
+  async processVideoChunk(
+    chunk: Uint8Array,
+    streamId: string,
+    duration: number
+  ): Promise<string> {
+    const segmentIndex = this.segments.length;
+    const blobId = await this.walrus.storeVideoSegment(chunk, streamId, segmentIndex);
+    
+    this.segments.push({ blobId, duration });
+    
+    // Keep only last 10 segments for live streaming
+    if (this.segments.length > 10) {
+      this.segments.shift();
+    }
+
+    return blobId;
+  }
+
+  // Generate current manifest
+  getCurrentManifest(): string {
+    return this.walrus.createHLSManifest(this.segments);
+  }
+
+  // Store final manifest for VOD
+  async storeFinalManifest(streamId: string): Promise<string> {
+    const manifest = this.walrus.createHLSManifest(this.segments);
+    return this.walrus.storeManifest(manifest, streamId);
+  }
+
+  // Reset for new stream
+  reset(): void {
+    this.segments = [];
+  }
+}
+
+export const streamProcessor = new StreamProcessor(); 

@@ -1,0 +1,114 @@
+// StreamGuard Contract Configuration
+// Deployed on Sui Testnet
+
+export const CONTRACTS = {
+  // Package ID from deployment
+  PACKAGE_ID: '0x5ddfb36c0f29f30aabfe4bf50dcf02707411223a06415743f181074df58b4974',
+  
+  // Shared Objects
+  STREAM_REGISTRY: '0xee9eab89dc5e6d123ef2962bcabdebf1280ea75d58218dc3ee50f913bb5e9617',
+  PLATFORM_TREASURY: '0xe6f25686f7f64cda5c005690d0bc66c451d16631b2746662a5ff4d5f0770116e',
+  MODERATION_TREASURY: '0xd1e68d7a2a9dc9cd27001ea0ebf22201d4cb92eb2c22a7d28c29a6a62509bc82',
+  
+  // Upgrade Cap (owned by deployer)
+  UPGRADE_CAP: '0x0d3ff74fee2752bb841e009b9d144bc9b068bb52f4ba97207b89eaa916365361',
+  
+  // Module Names
+  MODULES: {
+    STREAM_MANAGER: 'stream_manager',
+    CREATOR_ECONOMY: 'creator_economy', 
+    CONTENT_NFT: 'content_nft',
+    MODERATION: 'moderation'
+  }
+} as const;
+
+// Function targets for Move calls
+export const MOVE_CALLS = {
+  // Stream Manager
+  CREATE_STREAM: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.STREAM_MANAGER}::create_stream_with_params`,
+  START_STREAM: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.STREAM_MANAGER}::start_stream`,
+  END_STREAM: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.STREAM_MANAGER}::end_stream`,
+  JOIN_STREAM: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.STREAM_MANAGER}::join_stream`,
+  UPDATE_STREAM_METADATA: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.STREAM_MANAGER}::update_stream_metadata`,
+  
+  // Creator Economy
+  CREATE_CREATOR_PROFILE: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CREATOR_ECONOMY}::create_creator_profile`,
+  ADD_SUBSCRIPTION_TIER: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CREATOR_ECONOMY}::add_subscription_tier`,
+  SUBSCRIBE_TO_CREATOR: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CREATOR_ECONOMY}::subscribe_to_creator`,
+  SEND_TIP: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CREATOR_ECONOMY}::send_tip`,
+  RENEW_SUBSCRIPTION: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CREATOR_ECONOMY}::renew_subscription`,
+  
+  // Content NFT
+  MINT_CONTENT_NFT: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CONTENT_NFT}::mint_content_nft`,
+  PURCHASE_LICENSE: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CONTENT_NFT}::purchase_license`,
+  RECORD_VIEW: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CONTENT_NFT}::record_view`,
+  PAY_ROYALTY: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CONTENT_NFT}::pay_royalty`,
+  CREATE_COLLECTION: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CONTENT_NFT}::create_collection`,
+  
+  // Moderation
+  REGISTER_MODERATOR: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.MODERATION}::register_moderator`,
+  SUBMIT_MODERATION_RESULT: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.MODERATION}::submit_moderation_result`,
+  CREATE_CONSENSUS: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.MODERATION}::create_consensus`,
+  SUBMIT_APPEAL: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.MODERATION}::submit_appeal`,
+  VOTE_ON_APPEAL: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.MODERATION}::vote_on_appeal`
+} as const;
+
+// Network Configuration
+export const NETWORK_CONFIG = {
+  TESTNET: {
+    RPC_URL: 'https://fullnode.testnet.sui.io:443',
+    FAUCET_URL: 'https://faucet.testnet.sui.io/gas',
+    EXPLORER_URL: 'https://testnet.suivision.xyz'
+  },
+  MAINNET: {
+    RPC_URL: 'https://fullnode.mainnet.sui.io:443',
+    EXPLORER_URL: 'https://suivision.xyz'
+  }
+} as const;
+
+// Current network (change for production)
+export const CURRENT_NETWORK = 'TESTNET' as const;
+
+// Walrus Configuration
+export const WALRUS_CONFIG = {
+  PUBLISHER_URL: import.meta.env.VITE_WALRUS_PUBLISHER_URL || 'https://publisher.walrus-testnet.walrus.space',
+  AGGREGATOR_URL: import.meta.env.VITE_WALRUS_AGGREGATOR_URL || 'https://aggregator.walrus-testnet.walrus.space',
+  EPOCHS: 5 // Number of epochs to store content
+} as const;
+
+// RTMP Configuration
+export const RTMP_CONFIG = {
+  SERVER_URL: import.meta.env.VITE_RTMP_SERVER_URL || 'rtmp://localhost/live',
+  SERVER_HOST: import.meta.env.VITE_RTMP_SERVER_HOST || 'localhost',
+  SERVER_PORT: import.meta.env.VITE_RTMP_SERVER_PORT || '1935',
+} as const;
+
+// Platform Constants
+export const PLATFORM_CONSTANTS = {
+  PLATFORM_FEE_BPS: 250, // 2.5%
+  MIN_TIP_AMOUNT: 1000000, // 0.001 SUI in MIST
+  MIN_SUBSCRIPTION_AMOUNT: 10000000, // 0.01 SUI in MIST
+  SUBSCRIPTION_DURATION_MS: 2592000000, // 30 days
+  MIN_MODERATOR_STAKE: 1000000000, // 1 SUI in MIST
+} as const;
+
+// Event Types for listening to blockchain events
+export const EVENT_TYPES = {
+  STREAM_CREATED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.STREAM_MANAGER}::StreamCreated`,
+  STREAM_STARTED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.STREAM_MANAGER}::StreamStarted`,
+  STREAM_ENDED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.STREAM_MANAGER}::StreamEnded`,
+  VIEWER_JOINED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.STREAM_MANAGER}::ViewerJoined`,
+  
+  CREATOR_PROFILE_CREATED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CREATOR_ECONOMY}::CreatorProfileCreated`,
+  SUBSCRIPTION_CREATED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CREATOR_ECONOMY}::SubscriptionCreated`,
+  TIP_SENT: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CREATOR_ECONOMY}::TipSent`,
+  REVENUE_DISTRIBUTED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CREATOR_ECONOMY}::RevenueDistributed`,
+  
+  CONTENT_NFT_MINTED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CONTENT_NFT}::ContentNFTMinted`,
+  CONTENT_LICENSED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CONTENT_NFT}::ContentLicensed`,
+  CONTENT_VIEWED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.CONTENT_NFT}::ContentViewed`,
+  
+  MODERATOR_REGISTERED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.MODERATION}::ModeratorRegistered`,
+  MODERATION_SUBMITTED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.MODERATION}::ModerationSubmitted`,
+  CONSENSUS_REACHED: `${CONTRACTS.PACKAGE_ID}::${CONTRACTS.MODULES.MODERATION}::ConsensusReached`,
+} as const; 

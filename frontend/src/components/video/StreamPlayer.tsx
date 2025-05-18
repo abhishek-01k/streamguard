@@ -1,86 +1,85 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
-// Import quality selector plugins
-import 'videojs-contrib-quality-levels';
-import 'videojs-hls-quality-selector';
-import '@silvermine/videojs-quality-selector';
-import '@silvermine/videojs-quality-selector/dist/css/quality-selector.css';
-import { StreamPlayerConfig, QualityLevel } from '../../types/stream';
-import { walrusService } from '../../lib/walrus';
-import { useStreamStore } from '../../stores/streamStore';
+import { Play, Pause, Volume2, VolumeX, Maximize, Settings } from 'lucide-react';
 
-// Video.js player type
-type VideoJSPlayer = ReturnType<typeof videojs>;
-
-interface StreamPlayerProps extends StreamPlayerConfig {
-  className?: string;
-  width?: number;
-  height?: number;
+interface StreamPlayerProps {
+  manifestUrl: string;
+  title: string;
+  isLive: boolean;
 }
 
 export const StreamPlayer: React.FC<StreamPlayerProps> = ({
-  streamId,
-  walrusManifestId,
-  autoplay = false,
-  controls = true,
-  muted = false,
-  poster,
-  qualityLevels = [QualityLevel.QUALITY_720P],
-  onReady,
-  onPlay,
-  onPause,
-  onEnded,
-  onError,
-  className = '',
-  width = 854,
-  height = 480,
+  manifestUrl,
+  title,
+  isLive,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const playerRef = useRef<VideoJSPlayer | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const playerRef = useRef<any>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [manifestUrl, setManifestUrl] = useState<string>('');
-  
-  const { updateHeartbeat, currentSession } = useStreamStore();
 
-  // Initialize Video.js player
-  const initializePlayer = useCallback(async () => {
+  useEffect(() => {
     if (!videoRef.current) return;
 
-    try {
-      setIsLoading(true);
-      setError(null);
+    // Clear any existing error state
+    setError(null);
 
-      // Use demo HLS stream if no Walrus manifest is provided
-      let manifestUrl = '';
-      if (walrusManifestId && !walrusManifestId.startsWith('mock_manifest_')) {
-        // Get the HLS manifest URL from Walrus
-        manifestUrl = walrusService.getBlobUrl(walrusManifestId);
-      } else {
-        // Use a demo HLS stream for testing
-        manifestUrl = 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8';
-      }
+    // Prevent double initialization
+    if (playerRef.current) {
+      console.log('🎥 Player already exists, updating source...');
       
-      setManifestUrl(manifestUrl);
+      try {
+        // Update the source instead of reinitializing
+        if (isLive && manifestUrl) {
+          console.log('🎥 Updating live stream source:', manifestUrl);
+          playerRef.current.src({
+            src: manifestUrl,
+            type: 'application/x-mpegURL',
+          });
+        } else if (isLive && !manifestUrl) {
+          console.log('⚠️ Live stream has no manifest URL - showing placeholder');
+          setError('This is a demo stream. Video content would be streamed from Walrus in production.');
+        } else {
+          console.log('📺 Updating demo HLS stream');
+          playerRef.current.src({
+            src: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
+            type: 'application/x-mpegURL',
+          });
+        }
+      } catch (error) {
+        console.error('Error updating player source:', error);
+        setError('Failed to update video source');
+      }
+      return;
+    }
 
-      // Video.js configuration
-      const options = {
-        autoplay: false, // Disable autoplay to avoid browser restrictions
-        controls,
-        muted,
-        poster,
-        width: '100%',
-        height: '100%',
-        fluid: true,
+    console.log('🎥 Initializing new Video.js player...');
+
+    // Ensure the video element is properly set up
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    // Make sure the element is in the DOM and properly configured
+    videoElement.className = 'video-js vjs-default-skin';
+    videoElement.setAttribute('playsinline', 'true');
+    videoElement.setAttribute('data-setup', '{}');
+
+    // Initialize Video.js player with error handling
+    let player: any;
+    try {
+      player = videojs(videoElement, {
+        controls: true,
         responsive: true,
-        fill: true,
+        fluid: true,
         playbackRates: [0.5, 1, 1.25, 1.5, 2],
-        sources: [{
-          src: manifestUrl,
-          type: 'application/x-mpegURL', // HLS MIME type
-        }],
+        liveui: isLive, // Enable live UI for live streams
+        plugins: {
+          // Add quality selector if available
+        },
         html5: {
           hls: {
             enableLowInitialPlaylist: true,
@@ -88,290 +87,282 @@ export const StreamPlayer: React.FC<StreamPlayerProps> = ({
             overrideNative: true,
           },
         },
-        techOrder: ['html5'],
-      };
+      });
 
-      // Initialize player
-      const player = videojs(videoRef.current, options);
       playerRef.current = player;
 
-      // Player event handlers
-      player.ready(() => {
-        console.log('Player ready');
-        setIsLoading(false);
-        
-        // Initialize quality selector after player is ready
+      // Set up event listeners with error handling
+      const handlePlay = () => setIsPlaying(true);
+      const handlePause = () => setIsPlaying(false);
+      const handleVolumeChange = () => {
         try {
-          // Add HLS quality selector if available
-          if (typeof (player as any).hlsQualitySelector === 'function') {
-            (player as any).hlsQualitySelector({
-              displayCurrentQuality: true,
-            });
+          const currentVolume = player.volume();
+          const currentMuted = player.muted();
+          if (typeof currentVolume === 'number') {
+            setVolume(currentVolume);
           }
-          // Fallback to silvermine quality selector
-          else if (typeof (player as any).qualitySelector === 'function') {
-            (player as any).qualitySelector();
+          if (typeof currentMuted === 'boolean') {
+            setIsMuted(currentMuted);
           }
-        } catch (qualityError) {
-          console.warn('Quality selector not available:', qualityError);
+        } catch (error) {
+          console.warn('Error handling volume change:', error);
         }
-        
-        onReady?.(player);
-      });
-
-      player.on('loadstart', () => {
-        console.log('Load start');
-      });
-
-      player.on('loadedmetadata', () => {
-        console.log('Metadata loaded');
-      });
-
-      player.on('canplay', () => {
-        console.log('Can play');
-        setIsLoading(false);
-      });
-
-      player.on('play', () => {
-        console.log('Playing');
-        onPlay?.();
-      });
-
-      player.on('pause', () => {
-        onPause?.();
-      });
-
-      player.on('ended', () => {
-        onEnded?.();
-      });
-
-      player.on('error', (event: any) => {
-        const error = player.error();
-        console.error('Player error:', error);
-        const errorMessage = error ? `Video error: ${error.message}` : 'Unknown video error';
-        setError(errorMessage);
-        setIsLoading(false);
-        onError?.(new Error(errorMessage));
-      });
-
-      // Quality change handler
-      player.on('qualitychange', (event: any) => {
-        const quality = event.quality;
-        if (quality && currentSession) {
-          updateHeartbeat(quality.level || QualityLevel.QUALITY_720P);
+      };
+      const handleFullscreenChange = () => {
+        try {
+          const currentFullscreen = player.isFullscreen();
+          if (typeof currentFullscreen === 'boolean') {
+            setIsFullscreen(currentFullscreen);
+          }
+        } catch (error) {
+          console.warn('Error handling fullscreen change:', error);
         }
-      });
-
-      // Heartbeat for analytics (every 30 seconds)
-      const heartbeatInterval = setInterval(() => {
-        if (player && !player.paused() && currentSession) {
-          const currentQuality = getCurrentQuality(player);
-          updateHeartbeat(currentQuality);
+      };
+      const handleError = (e: any) => {
+        console.error('Video player error:', e);
+        try {
+          const error = player.error();
+          if (error?.code === 4) {
+            // Network error - likely the manifest doesn't exist
+            setError('Stream content not available. This may be a demo stream or the content is still being uploaded to Walrus.');
+          } else if (error?.code === 3) {
+            // Decode error
+            setError('Video format not supported or corrupted stream.');
+          } else {
+            setError('Failed to load stream. Please try again.');
+          }
+        } catch (err) {
+          console.error('Error handling video error:', err);
+          setError('Video player encountered an error');
         }
-      }, 30000);
-
-      // Cleanup interval on component unmount
-      return () => {
-        clearInterval(heartbeatInterval);
       };
 
-    } catch (error) {
-      console.error('Failed to initialize player:', error);
-      setError(`Failed to load stream: ${(error as Error).message}`);
-      setIsLoading(false);
-    }
-  }, [
-    walrusManifestId,
-    autoplay,
-    controls,
-    muted,
-    poster,
-    width,
-    height,
-    onReady,
-    onPlay,
-    onPause,
-    onEnded,
-    onError,
-    updateHeartbeat,
-    currentSession,
-  ]);
+      // Add event listeners
+      player.on('play', handlePlay);
+      player.on('pause', handlePause);
+      player.on('volumechange', handleVolumeChange);
+      player.on('fullscreenchange', handleFullscreenChange);
+      player.on('error', handleError);
 
-  // Get current quality level from player
-  const getCurrentQuality = (player: VideoJSPlayer): QualityLevel => {
-    try {
-      const tech = player.tech();
-      if (tech && (tech as any).hls) {
-        const currentLevel = (tech as any).hls.currentLevel;
-        return mapHLSLevelToQuality(currentLevel);
+      // Load the stream
+      if (isLive && manifestUrl) {
+        console.log('🎥 Loading live stream from Walrus:', manifestUrl);
+        // For live streams, use HLS manifest from Walrus
+        player.src({
+          src: manifestUrl,
+          type: 'application/x-mpegURL',
+        });
+      } else if (isLive && !manifestUrl) {
+        console.log('⚠️ Live stream has no manifest URL - showing placeholder');
+        // For live streams without manifest URL (demo/development)
+        setError('This is a demo stream. Video content would be streamed from Walrus in production.');
+        return;
+      } else {
+        console.log('📺 Loading demo HLS stream');
+        // For demo purposes, use a test HLS stream
+        player.src({
+          src: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
+          type: 'application/x-mpegURL',
+        });
       }
-    } catch (error) {
-      console.warn('Could not get current quality:', error);
-    }
-    return QualityLevel.QUALITY_720P; // Default fallback
-  };
 
-  // Map HLS level to our quality enum
-  const mapHLSLevelToQuality = (level: number): QualityLevel => {
-    switch (level) {
-      case 0: return QualityLevel.QUALITY_240P;
-      case 1: return QualityLevel.QUALITY_480P;
-      case 2: return QualityLevel.QUALITY_720P;
-      case 3: return QualityLevel.QUALITY_1080P;
-      case 4: return QualityLevel.QUALITY_4K;
-      default: return QualityLevel.QUALITY_720P;
-    }
-  };
+      // Auto-play for live streams (muted to comply with browser policies)
+      if (isLive && manifestUrl) {
+        player.muted(true);
+        setIsMuted(true);
+        player.play()?.catch((error: any) => {
+          console.log('Auto-play failed:', error);
+        });
+      }
 
-  // Initialize player when component mounts or manifest changes
-  useEffect(() => {
-    const cleanup = initializePlayer();
-    
+    } catch (initError) {
+      console.error('Failed to initialize Video.js player:', initError);
+      setError('Failed to initialize video player');
+      return;
+    }
+
     return () => {
-      cleanup?.then(cleanupFn => cleanupFn?.());
-      
-      // Dispose of Video.js player
+      console.log('🎥 Cleaning up Video.js player...');
       if (playerRef.current) {
-        playerRef.current.dispose();
-        playerRef.current = null;
+        try {
+          // Remove event listeners before disposing
+          playerRef.current.off();
+          
+          // Check if player is still valid before disposing
+          if (typeof playerRef.current.dispose === 'function') {
+            playerRef.current.dispose();
+          }
+        } catch (error) {
+          console.warn('Error disposing player:', error);
+        } finally {
+          playerRef.current = null;
+        }
       }
     };
-  }, [initializePlayer]);
+  }, [manifestUrl, isLive, title]); // Added title to dependencies to trigger re-render when stream changes
 
-  // Player control methods
-  const play = useCallback(() => {
-    if (playerRef.current) {
+  const togglePlay = () => {
+    if (!playerRef.current) return;
+    
+    if (isPlaying) {
+      playerRef.current.pause();
+    } else {
       playerRef.current.play();
     }
-  }, []);
+  };
 
-  const pause = useCallback(() => {
-    if (playerRef.current) {
-      playerRef.current.pause();
-    }
-  }, []);
+  const toggleMute = () => {
+    if (!playerRef.current) return;
+    
+    playerRef.current.muted(!isMuted);
+  };
 
-  const setVolume = useCallback((volume: number) => {
-    if (playerRef.current) {
-      playerRef.current.volume(Math.max(0, Math.min(1, volume)));
+  const handleVolumeChange = (newVolume: number) => {
+    if (!playerRef.current) return;
+    
+    playerRef.current.volume(newVolume);
+    if (newVolume === 0) {
+      playerRef.current.muted(true);
+    } else if (isMuted) {
+      playerRef.current.muted(false);
     }
-  }, []);
+  };
 
-  const seek = useCallback((time: number) => {
-    if (playerRef.current) {
-      playerRef.current.currentTime(time);
+  const toggleFullscreen = () => {
+    if (!playerRef.current) return;
+    
+    if (isFullscreen) {
+      playerRef.current.exitFullscreen();
+    } else {
+      playerRef.current.requestFullscreen();
     }
-  }, []);
-
-  const setQuality = useCallback((quality: QualityLevel) => {
-    if (playerRef.current) {
-      const tech = playerRef.current.tech();
-      if (tech && (tech as any).hls) {
-        (tech as any).hls.currentLevel = quality;
-      }
-    }
-  }, []);
+  };
 
   if (error) {
+    const isDemoError = error.includes('demo stream');
+    
     return (
-      <div 
-        ref={containerRef}
-        className={`stream-player-error relative ${className}`} 
-        style={{ width: '100%', height: '100%', minHeight: '400px' }}
-      >
-        <div className="flex items-center justify-center h-full bg-gray-900 text-white rounded-lg">
-          <div className="text-center">
-            <div className="text-red-500 text-xl mb-2">⚠️</div>
-            <div className="text-lg font-semibold mb-2">Playback Error</div>
-            <div className="text-sm text-gray-300 mb-4">{error}</div>
+      <div className="relative w-full aspect-video bg-gray-900 flex items-center justify-center">
+        <div className="text-center text-white max-w-md px-4">
+          <div className="text-6xl mb-4">{isDemoError ? '🎬' : '⚠️'}</div>
+          <h3 className="text-xl font-semibold mb-2">
+            {isDemoError ? 'Demo Stream' : 'Stream Unavailable'}
+          </h3>
+          <p className="text-gray-400 mb-4">{error}</p>
+          {isDemoError ? (
+            <div className="bg-blue-900 bg-opacity-50 p-4 rounded-lg text-sm">
+              <p className="text-blue-300 mb-2">
+                <strong>🔧 Development Mode:</strong>
+              </p>
+              <p className="text-blue-200">
+                In production, this would stream live video content stored on Walrus decentralized storage.
+                Connect OBS to the RTMP server to see the streaming setup in action.
+              </p>
+            </div>
+          ) : (
             <button
-              onClick={() => initializePlayer()}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              onClick={() => window.location.reload()}
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
             >
               Retry
             </button>
-          </div>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div 
-      ref={containerRef}
-      className={`stream-player-container relative ${className}`} 
-      style={{ width: '100%', height: '100%', minHeight: '400px' }}
-    >
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white rounded-lg z-10">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
-            <div className="text-lg">Loading stream...</div>
-          </div>
-        </div>
-      )}
-      
+    <div className="relative w-full aspect-video bg-black group">
+      {/* Video Element */}
       <video
         ref={videoRef}
         className="video-js vjs-default-skin w-full h-full"
         data-setup="{}"
         playsInline
-        style={{ width: '100%', height: '100%' }}
       />
-      
-      {/* Stream info overlay */}
-      <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded text-sm z-20">
-        Stream ID: {streamId}
+
+      {/* Live Indicator */}
+      {isLive && (
+        <div className="absolute top-4 left-4 z-10">
+          <div className="flex items-center space-x-2 bg-red-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+            <span>LIVE</span>
+          </div>
+        </div>
+      )}
+
+      {/* Stream Title */}
+      <div className="absolute top-4 right-4 z-10 bg-black bg-opacity-70 text-white px-3 py-1 rounded-lg text-sm max-w-xs truncate">
+        {title}
       </div>
-      
-      {/* Quality indicator */}
-      <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded text-sm z-20">
-        {manifestUrl && (
-          <span className="text-green-400">● LIVE</span>
-        )}
+
+      {/* Custom Controls Overlay (hidden when Video.js controls are visible) */}
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div className="flex items-center space-x-4">
+          {/* Play/Pause */}
+          <button
+            onClick={togglePlay}
+            className="text-white hover:text-blue-400 transition-colors"
+          >
+            {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+          </button>
+
+          {/* Volume */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={toggleMute}
+              className="text-white hover:text-blue-400 transition-colors"
+            >
+              {isMuted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={isMuted ? 0 : volume}
+              onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+              className="w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Quality Selector (placeholder) */}
+          <button className="text-white hover:text-blue-400 transition-colors">
+            <Settings size={20} />
+          </button>
+
+          {/* Fullscreen */}
+          <button
+            onClick={toggleFullscreen}
+            className="text-white hover:text-blue-400 transition-colors"
+          >
+            <Maximize size={20} />
+          </button>
+        </div>
       </div>
+
+      {/* Loading Spinner */}
+      {!isPlaying && !error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
+
+      {/* Click to Play Overlay */}
+      {!isPlaying && !error && (
+        <div 
+          className="absolute inset-0 flex items-center justify-center cursor-pointer"
+          onClick={togglePlay}
+        >
+          <div className="bg-blue-600 bg-opacity-80 rounded-full p-6 hover:bg-opacity-100 transition-all">
+            <Play size={48} className="text-white fill-current" />
+          </div>
+        </div>
+      )}
     </div>
   );
-};
-
-// Quality selector component
-interface QualitySelectorProps {
-  currentQuality: QualityLevel;
-  availableQualities: QualityLevel[];
-  onQualityChange: (quality: QualityLevel) => void;
-}
-
-export const QualitySelector: React.FC<QualitySelectorProps> = ({
-  currentQuality,
-  availableQualities,
-  onQualityChange,
-}) => {
-  const getQualityLabel = (quality: QualityLevel): string => {
-    switch (quality) {
-      case QualityLevel.QUALITY_240P: return '240p';
-      case QualityLevel.QUALITY_480P: return '480p';
-      case QualityLevel.QUALITY_720P: return '720p';
-      case QualityLevel.QUALITY_1080P: return '1080p';
-      case QualityLevel.QUALITY_4K: return '4K';
-      default: return 'Auto';
-    }
-  };
-
-  return (
-    <div className="quality-selector">
-      <select
-        value={currentQuality}
-        onChange={(e) => onQualityChange(Number(e.target.value) as QualityLevel)}
-        className="bg-black bg-opacity-50 text-white border border-gray-600 rounded px-2 py-1 text-sm"
-      >
-        {availableQualities.map((quality) => (
-          <option key={quality} value={quality}>
-            {getQualityLabel(quality)}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-};
-
-export default StreamPlayer; 
+}; 
